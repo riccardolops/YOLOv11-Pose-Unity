@@ -63,6 +63,39 @@ public class Drawable
         }
     }
 
+    public void DrawBoundingBoxes(List<YoloPosePrediction> yoloPosePredictions)
+    {
+        // Calculate the offset for center-middle anchoring
+        float offsetX = screenWidth / 2;
+        float offsetY = screenHeight / 2;
+
+        foreach (YoloPosePrediction prediction in yoloPosePredictions)
+        {
+            // Get a bounding box from the pool
+            BoundingBox boundingBox = boundingBoxPool.Get();
+            activeBoundingBoxes.Add(boundingBox);
+
+            // Get the RectTransform of the bounding box
+            RectTransform boxRectTransform = boundingBox.GetComponent<RectTransform>();
+
+            var predBoundingBox = prediction.BoundingBox;
+
+            // Calculate the box's position relative to the center of the image (center-middle anchoring)
+            float xMin = predBoundingBox.xMin - offsetX;
+            float yMin = predBoundingBox.yMin - offsetY;
+            float width = predBoundingBox.width;
+            float height = predBoundingBox.height;
+
+            // Set the size and position of the bounding box
+            boxRectTransform.anchoredPosition = new Vector2(xMin + width / 2, yMin + height / 2); // Center the box
+            boxRectTransform.sizeDelta = new Vector2(width, height);
+
+            // Update the bounding box appearance
+            boundingBox.SetColor(new Color(0.0f, 1.0f, 0.0f, 0.25f));
+            boundingBox.SetLabel($"Human ({prediction.Score:F2})");
+        }
+    }
+
     public void ResetBoundingBoxes()
     {
         foreach (BoundingBox box in activeBoundingBoxes)

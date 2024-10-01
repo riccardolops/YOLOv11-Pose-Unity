@@ -1,0 +1,109 @@
+#pragma kernel CSMain
+
+// Constants
+cbuffer Constants
+{
+    float confidenceThreshold;
+    int numDetections; // Should be 8400 in your case
+    int numLandmarks;
+    int imageWidth;
+    int imageHeight;
+}
+
+// Define float51 struct
+struct float51
+{
+    float landmarks[51];
+};
+
+// Input buffers (set by the CPU)
+StructuredBuffer<float> outputTensor; // YOLO output tensor
+
+// Output buffers (writeable, set by the CPU)
+RWStructuredBuffer<float4> outputBoxes; // Stores [xMin, yMin, xMax, yMax] for each valid detection
+// RWStructuredBuffer<int> outputClasses; // Stores the class index for each valid detection
+RWStructuredBuffer<float51> outputLandmarks; // Stores [x1, y1, s1, x2, y2, s2, ... , x17, y17, s17] for each valid detection
+RWStructuredBuffer<float> outputScores; // Stores the confidence score for each valid detection
+
+// Atomic counter for counting valid detections
+RWByteAddressBuffer validDetectionCounter;
+
+// Thread group size: 256 threads per group
+[numthreads(256, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint detectionIndex = id.x;
+    if (detectionIndex >= numDetections)
+        return;
+
+    // Define offsets for each attribute in column-major format
+    uint centerXOffset = 0 * numDetections; // First 8400 values are centerX
+    uint centerYOffset = 1 * numDetections; // Next 8400 values are centerY
+    uint widthOffset = 2 * numDetections; // Next 8400 values are width
+    uint heightOffset = 3 * numDetections; // Next 8400 values are height
+    uint humanScoreOffset = 4 * numDetections; // Next 8400 values are Human score
+    
+    float humanScore = outputTensor[humanScoreOffset + detectionIndex];
+    
+    // Calculate final confidence score
+    if (humanScore < confidenceThreshold)
+        return;
+
+    //// Extract class scores and find the best one
+    //float maxClassScore = 0.0f;
+    //int classIndex = 0;
+    //for (int j = 0; j < numClasses; j++)
+    //{
+    //    uint landmarkOffset = (5 + j) * numDetections; // Landmark position and scores start after the 5 main attributes
+    //    float classScore = outputTensor[landmarkOffset + detectionIndex];
+    //    if (classScore > maxClassScore)
+    //    {
+    //        maxClassScore = classScore;
+    //        classIndex = j;
+    //    }
+    //}
+    //
+    //// Calculate final confidence score
+    //if (maxClassScore < confidenceThreshold)
+    //    return;
+    
+    //// Extract landmark positions and scores
+    float51 landmarks51;
+    for (int j = 0; j < numLandmarks; j++)
+    {
+        uint landmarkOffset = (5 + j) * numDetections; // Landmark position and scores start after the 5 main attributes
+        landmarks51.landmarks[j] = outputTensor[landmarkOffset + detectionIndex];
+    }
+    
+
+    // Extract bounding box in center format (centerX, centerY, width, height)
+    float centerX = outputTensor[centerXOffset + detectionIndex];
+    float centerY = outputTensor[centerYOffset + detectionIndex];
+    float boxWidth = outputTensor[widthOffset + detectionIndex];
+    float boxHeight = outputTensor[heightOffset + detectionIndex];
+
+    // Convert bbox from center format to top-left and bottom-right
+    float xMin = centerX - (boxWidth / 2.0f);
+    float yMin = centerY - (boxHeight / 2.0f);
+    float xMax = centerX + (boxWidth / 2.0f);
+    float yMax = centerY + (boxHeight / 2.0f);
+    
+    // Apply scaling factors to adjust from 640x640 to actual image size
+    //xMin *= scaleX;
+    //xMax *= scaleX;
+    //yMin *= scaleY;
+    //yMax *= scaleY;
+
+    // Adjust for image height (flip Y-axis)
+    float flippedYMin = imageHeight - yMax;
+    float flippedYMax = imageHeight - yMin;
+
+    // Atomically increment the detection counter and get the valid index
+    uint validIndex;
+    validDetectionCounter.InterlockedAdd(0, 1, validIndex); // Atomically add 4 to the counter
+
+    // Write the valid detection data to the output buffer at the valid index
+    outputBoxes[validIndex] = float4(xMin, flippedYMin, boxWidth, flippedYMax - flippedYMin); // Store bounding box coordinates
+    outputLandmarks[validIndex] = landmarks51; // Store the detection landmarks
+    outputScores[validIndex] = humanScore; // Store the confidence score
+}

@@ -10,7 +10,7 @@ public class UIHandler : MonoBehaviour
     [SerializeField] private TMP_InputField confidenceThreshold;
     [SerializeField] private TMP_InputField iouThreshold;
     [SerializeField] private TMP_Dropdown sourceTypeSelector;
-    [SerializeField] private Detector detector;
+    [SerializeField] private DetectorPose detector;
     [SerializeField] private FileLoader fileLoader;
     [SerializeField] private GameObject userInterface;
     [SerializeField] private GameObject display;
