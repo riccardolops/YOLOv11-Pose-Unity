@@ -83,10 +83,9 @@ public class YoloPose
             float width = boxes[i * 4 + 2];
             float height = boxes[i * 4 + 3];
 
-            int x = i * 17;
-            int length = 17;
+            int x = i * numLandmarks;
             float[] newArray = new float[numLandmarks];
-            Array.Copy(landmarks, x, newArray, 0, length);
+            Array.Copy(landmarks, x, newArray, 0, numLandmarks);
 
             YoloPosePrediction prediction = new YoloPosePrediction
             {
